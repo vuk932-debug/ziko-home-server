@@ -1,0 +1,362 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "linux-musl-openssl-3.0.x"]
+  engineType    = "library"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String               @id @default(uuid())
+  agentId              String?              @unique
+  name                 String
+  phone                String               @unique
+  email                String?              @unique
+  password             String?
+  tempPassword         String?
+  role                 Role                 @default(Customer)
+  isApproved           Boolean              @default(false)
+  isVerified           Boolean              @default(false)
+  trustScore           Int                  @default(50)
+  isBanned             Boolean              @default(false)
+  isActive             Boolean              @default(true)
+  refreshToken         String?
+  passwordResetToken   String?
+  passwordResetExpires DateTime?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  emailVerified        Boolean              @default(false)
+  otpAttempts          Int                  @default(0)
+  otpCodeHash          String?
+  otpExpiresAt         DateTime?
+  otpLastSentAt        DateTime?
+  resetTokenExpiry     DateTime?
+  resetTokenHash       String?
+  
+  // Profile Setup Fields (CP & Writer)
+  profileCompleted     Boolean              @default(false)
+  profileImage         String?
+  companyName          String?
+  officeAddress        String?
+  city                 String?
+  state                String?
+  country              String?              @default("India")
+  bio                  String?              @db.Text
+  reraNumber           String?
+  website              String?
+  socialLinks          String?              @db.Text
+  specialization       String?
+
+  assignedLeads        Lead[]               @relation("LeadAssigned")
+  customerLeads        Lead[]               @relation("LeadCustomer")
+  cpLeads              Lead[]               @relation("LeadCP")
+  properties           Property[]           @relation("PropertyCP")
+  subscription         Subscription[]
+  recentlyViewed       UserRecentlyViewed[]
+  savedProperties      UserSavedProperty[]
+  blogs                Blog[]               @relation("BlogAuthor")
+  likes                Like[]
+  shares               Share[]
+}
+
+model Like {
+  id         String     @id @default(uuid())
+  userId     String
+  entityId   String
+  entityType EntityType
+  createdAt  DateTime   @default(now())
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, entityId, entityType])
+  @@index([entityId, entityType])
+}
+
+model Share {
+  id         String     @id @default(uuid())
+  userId     String?
+  entityId   String
+  entityType EntityType
+  platform   String
+  createdAt  DateTime   @default(now())
+  user       User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entityId, entityType])
+}
+
+enum EntityType {
+  PROPERTY
+  BLOG
+}
+
+model OneTimePassword {
+  id         String   @id @default(uuid())
+  identifier String   @unique
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+
+model Country {
+  id     String  @id @default(uuid())
+  name   String  @unique
+  code   String  @unique
+  states State[]
+  cities City[]
+}
+
+model State {
+  id        String  @id @default(uuid())
+  name      String
+  code      String?
+  countryId String
+  country   Country @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  cities    City[]
+
+  @@unique([name, countryId])
+}
+
+model City {
+  id        String  @id @default(uuid())
+  name      String
+  stateId   String
+  countryId String
+  state     State   @relation(fields: [stateId], references: [id], onDelete: Cascade)
+  country   Country @relation(fields: [countryId], references: [id], onDelete: Cascade)
+
+  @@unique([name, stateId])
+}
+
+model Property {
+  id              String               @id @default(uuid())
+  title           String
+  description     String               @db.Text
+  price           Float
+  propertyType    String
+  bedrooms        Int
+  bathrooms       Int
+  area            Float
+  location        String
+  category        String               @default("READY_TO_MOVE")
+  lat             Float                @default(0)
+  lng             Float                @default(0)
+  country         String               @default("India")
+  city            String
+  state           String
+  pincode         String
+  status          PropertyStatus       @default(pending)
+  sellerId        String
+  verified        Boolean              @default(false)
+  featured        Boolean              @default(false)
+  views           Int                  @default(0)
+  impressionCount Int                  @default(0)
+  detailViewCount Int                  @default(0)
+  leadCount       Int                  @default(0)
+  priorityScore   Int                  @default(0)
+  popularityScore Float                @default(0)
+  fraudFlag       Boolean              @default(false)
+  slug            String               @unique
+  planType        PlanType             @default(STANDARD)
+  lastRefreshedAt DateTime             @default(now())
+  contactNumber   String?
+  isDeleted       Boolean              @default(false)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  leads           Lead[]
+  cp              User                 @relation("PropertyCP", fields: [sellerId], references: [id])
+  amenities       PropertyAmenity[]
+  images          PropertyImage[]
+  viewedByUsers   UserRecentlyViewed[]
+  savedByUsers    UserSavedProperty[]
+
+  @@index([status, price])
+  @@index([sellerId])
+  @@index([country])
+  @@index([state])
+  @@index([city])
+  @@index([planType])
+  @@index([lastRefreshedAt])
+  @@index([createdAt])
+}
+
+model PropertyImage {
+  id         String   @id @default(uuid())
+  propertyId String
+  url        String?
+  createdAt  DateTime @default(now())
+  imageData  Bytes?
+  mimeType   String?
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+}
+
+model PropertyAmenity {
+  id         String   @id @default(uuid())
+  propertyId String
+  name       String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId], map: "PropertyAmenity_propertyId_fkey")
+}
+
+model UserSavedProperty {
+  userId     String
+  propertyId String
+  savedAt    DateTime @default(now())
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, propertyId])
+  @@index([propertyId], map: "UserSavedProperty_propertyId_fkey")
+}
+
+model UserRecentlyViewed {
+  userId     String
+  propertyId String
+  viewedAt   DateTime @default(now())
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, propertyId])
+  @@index([propertyId], map: "UserRecentlyViewed_propertyId_fkey")
+}
+
+model Lead {
+  id           String     @id @default(uuid())
+  propertyId   String
+  sellerId     String?
+  buyerId      String?
+  name         String?
+  phone        String?
+  email        String?
+  source       String     @default("PROPERTY_VIEW")
+  assignedTo   String?
+  message      String?    @db.Text
+  status       LeadStatus @default(NEW)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  assignedUser User?      @relation("LeadAssigned", fields: [assignedTo], references: [id])
+  customer     User?      @relation("LeadCustomer", fields: [buyerId], references: [id])
+  property     Property   @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  cp           User?      @relation("LeadCP", fields: [sellerId], references: [id])
+  notes        LeadNote[]
+
+  @@index([phone, propertyId])
+  @@index([assignedTo], map: "Lead_assignedTo_fkey")
+  @@index([buyerId], map: "Lead_buyerId_fkey")
+  @@index([propertyId], map: "Lead_propertyId_fkey")
+  @@index([sellerId], map: "Lead_sellerId_fkey")
+}
+
+model LeadNote {
+  id        String   @id @default(uuid())
+  leadId    String
+  note      String   @db.Text
+  createdAt DateTime @default(now())
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+}
+
+model Subscription {
+  id            String   @id @default(uuid())
+  userId        String
+  planType      PlanType
+  startDate     DateTime
+  endDate       DateTime
+  listingsCount Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+}
+
+model DevOtp {
+  id         String   @id @default(uuid())
+  identifier String
+  otp        String
+  resetToken String?
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+
+  @@index([identifier])
+}
+
+model Blog {
+  id             String     @id @default(uuid())
+  title          String
+  slug           String     @unique
+  content        String     @db.LongText
+  excerpt        String?    @db.Text
+  featuredImage         String?
+  featuredImageData     Bytes?     @db.LongBlob
+  featuredImageMimeType String?
+  authorId              String
+  status         BlogStatus @default(DRAFT)
+  seoTitle       String?
+  seoDescription String?    @db.Text
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  publishedAt    DateTime?
+  isDeleted      Boolean    @default(false)
+  author         User       @relation("BlogAuthor", fields: [authorId], references: [id])
+
+  @@index([authorId])
+  @@index([status])
+  @@index([slug])
+}
+
+enum Role {
+  Admin
+  CP
+  Customer
+  WRITER
+}
+
+enum BlogStatus {
+  DRAFT
+  REVIEW
+  PUBLISHED
+}
+
+enum PropertyStatus {
+  pending
+  approved
+  rejected
+  sold
+}
+
+enum PlanType {
+  STANDARD
+  PRO
+  PREMIUM
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  CLOSED
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  adminId     String
+  targetUserId String?
+  actionType  String
+  entityType  String
+  entityId    String?
+  metadata    String?  @db.Text
+  timestamp   DateTime @default(now())
+
+  @@index([adminId])
+  @@index([actionType])
+}
